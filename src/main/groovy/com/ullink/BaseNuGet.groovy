@@ -3,6 +3,7 @@ package com.ullink
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.Console
+import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.Input
 import org.gradle.process.internal.ExecActionFactory
@@ -44,7 +45,8 @@ class BaseNuGet extends Exec {
         return execActionFactory ?: project.services.get(ExecActionFactory.class)
     }
 
-    private File getNugetHome() {
+    @Internal
+    protected File getNugetHome() {
         def env = System.getenv()
         def nugetHome = env['NUGET_HOME']
         if (nugetHome != null) {
@@ -83,7 +85,8 @@ class BaseNuGet extends Exec {
         super.exec()
     }
 
-    private File getNugetExeLocalPath() {
+    @Internal
+    protected File getNugetExeLocalPath() {
         File localNuget
 
         if (nugetExePath != null && !nugetExePath.empty && !nugetExePath.startsWith("http")) {
@@ -117,7 +120,8 @@ class BaseNuGet extends Exec {
         localNuget
     }
 
-    private String getNugetDownloadLink() {
+    @Internal
+    protected String getNugetDownloadLink() {
         if (nugetExePath != null && !nugetExePath.empty && nugetExePath.startsWith("http")) {
             project.logger.debug("Nuget url path is resolved from property 'nugetExePath'")
 
@@ -129,7 +133,8 @@ class BaseNuGet extends Exec {
         return "https://dist.nuget.org/win-x86-commandline/v${project.extensions.nuget.version}/${exeName}"
     }
 
-    private String getNugetVerbosity() {
+    @Internal
+    protected String getNugetVerbosity() {
         if (logger.debugEnabled) return 'detailed'
         if (logger.infoEnabled) return 'normal'
         return 'quiet'
