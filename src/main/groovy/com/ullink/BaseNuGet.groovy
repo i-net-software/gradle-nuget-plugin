@@ -1,9 +1,12 @@
 package com.ullink
 
+import org.gradle.api.model.ObjectFactory
 import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.Console
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.Input
+import org.gradle.process.internal.ExecActionFactory
+import javax.inject.Inject
 import java.nio.file.Paths
 
 import static org.apache.tools.ant.taskdefs.condition.Os.*
@@ -18,7 +21,27 @@ class BaseNuGet extends Exec {
     @Input
     String nugetExePath
 
+    private final ObjectFactory objectFactory
+    private final ExecActionFactory execActionFactory
+
+    @Inject
+    BaseNuGet(ObjectFactory objectFactory, ExecActionFactory execActionFactory) {
+        this.objectFactory = objectFactory
+        this.execActionFactory = execActionFactory
+    }
+
     BaseNuGet() {
+        // Default constructor for compatibility
+    }
+
+    @Override
+    ObjectFactory getObjectFactory() {
+        return objectFactory ?: project.objects
+    }
+
+    @Override
+    ExecActionFactory getExecActionFactory() {
+        return execActionFactory ?: project.services.get(ExecActionFactory.class)
     }
 
     private File getNugetHome() {

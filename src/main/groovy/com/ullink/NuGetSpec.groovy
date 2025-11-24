@@ -4,13 +4,38 @@ import com.ullink.packagesparser.NugetParser
 import com.ullink.packagesparser.PackageReferenceParser
 import com.ullink.packagesparser.PackagesConfigParser
 import com.ullink.packagesparser.ProjectJsonParser
-import groovy.util.slurpersupport.GPathResult
+import groovy.xml.XmlSlurper
 import groovy.xml.XmlUtil
+import org.gradle.api.model.ObjectFactory
 import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.OutputFile
+import org.gradle.process.internal.ExecActionFactory
+import javax.inject.Inject
 
 class NuGetSpec extends Exec {
+    private final ObjectFactory objectFactory
+    private final ExecActionFactory execActionFactory
+
+    @Inject
+    NuGetSpec(ObjectFactory objectFactory, ExecActionFactory execActionFactory) {
+        this.objectFactory = objectFactory
+        this.execActionFactory = execActionFactory
+    }
+
+    NuGetSpec() {
+        // Default constructor for compatibility
+    }
+
+    @Override
+    ObjectFactory getObjectFactory() {
+        return objectFactory ?: project.objects
+    }
+
+    @Override
+    ExecActionFactory getExecActionFactory() {
+        return execActionFactory ?: project.services.get(ExecActionFactory.class)
+    }
 
     def nuspecFile
     @Internal
@@ -74,7 +99,7 @@ class NuGetSpec extends Exec {
         def final packageConfigFileName = 'packages.config'
         def final projectJsonFileName = 'project.json'
 
-        GPathResult root = new XmlSlurper(false, false).parseText(nuspecString)
+        def root = new XmlSlurper(false, false).parseText(nuspecString)
 
         def defaultMetadata = []
         def setDefaultMetadata = { String node, value ->

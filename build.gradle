@@ -1,54 +1,123 @@
 plugins {
-    id 'com.gradle.plugin-publish' version '0.15.0'
     id 'java-gradle-plugin'
-    id 'net.researchgate.release' version '2.6.0'
+    id 'com.gradle.plugin-publish' version '1.2.1' // Updated for Gradle 9 compatibility
+    id 'signing' // Required for Maven Central
+    id 'io.github.gradle-nexus.publish-plugin' version '2.0.0' // Automates Sonatype Nexus publishing
+    // id 'net.researchgate.release' version '2.6.0' // Temporarily disabled for Gradle 9 compatibility
 }
 
 apply plugin: 'groovy'
-apply plugin: 'com.gradle.plugin-publish'
+apply plugin: 'maven-publish'
 
-group = 'com.ullink.gradle'
+group = 'de.inetsoftware.gradle'
+
+repositories {
+    mavenCentral()
+}
 
 dependencies {
+    implementation gradleApi()
+    implementation localGroovy()
     implementation 'commons-io:commons-io:2.5'
     testImplementation 'xmlunit:xmlunit:1.6'
     testImplementation 'org.spockframework:spock-core:1.3-groovy-2.5'
 }
 
 
-pluginBundle {
-    website = 'https://github.com/Itiviti/gradle-nuget-plugin'
-    vcsUrl = 'https://github.com/Itiviti/gradle-nuget-plugin'
-
+gradlePlugin {
+    website = 'https://github.com/i-net-software/gradle-nuget-plugin'
+    vcsUrl = 'https://github.com/i-net-software/gradle-nuget-plugin'
+    
     plugins {
         nugetBase {
+            id = 'de.inetsoftware.nuget-base'
+            implementationClass = 'com.ullink.NuGetBasePlugin'
             displayName = 'Gradle Nuget Plugin Base'
             description = 'Base plugin without creating tasks'
-            tags = ['nuget']
+            tags.set(['nuget', 'dotnet'])
         }
         nuget {
+            id = 'de.inetsoftware.nuget'
+            implementationClass = 'com.ullink.NuGetPlugin'
             displayName = 'Gradle Nuget Plugin'
             description = 'Gradle plugin for NuGet, to package, upload artifacts and restore packages.'
-            tags = ['nuget']
-        }
-    }
-
-    mavenCoordinates {
-        groupId = 'com.ullink.gradle'
-    }
-}
-
-gradlePlugin {
-    plugins {
-        nugetBase {
-            id = 'com.ullink.nuget-base'
-            implementationClass = 'com.ullink.NuGetBasePlugin'
-        }
-        nuget {
-            id = 'com.ullink.nuget'
-            implementationClass = 'com.ullink.NuGetPlugin'
+            tags.set(['nuget', 'dotnet', 'package'])
         }
     }
 }
 
-project.tasks.afterReleaseBuild.dependsOn project.tasks.publishPlugins
+// project.tasks.afterReleaseBuild.dependsOn project.tasks.publishPlugins // Disabled - release plugin not compatible with Gradle 9
+
+publishing {
+    repositories {
+        mavenLocal()
+    }
+}
+
+// Configure Nexus Publish Plugin for Sonatype/Maven Central
+nexusPublishing {
+    repositories {
+        sonatype {
+            // New Central Portal URLs
+            nexusUrl.set(uri("https://ossrh-staging-api.central.sonatype.com/service/local/"))
+            snapshotRepositoryUrl.set(uri("https://central.sonatype.com/repository/maven-snapshots/"))
+            // Credentials - try both property name variations
+            username.set(
+                project.findProperty('ossrhUsername') 
+                    ?: project.findProperty('sonatypeUsername')
+                    ?: System.getenv('SONATYPE_USERNAME') 
+                    ?: System.getenv('OSSRH_USERNAME')
+                    ?: ""
+            )
+            password.set(
+                project.findProperty('ossrhPassword')
+                    ?: project.findProperty('sonatypePassword')
+                    ?: System.getenv('SONATYPE_PASSWORD')
+                    ?: System.getenv('OSSRH_PASSWORD')
+                    ?: ""
+            )
+            // Staging profile ID - should be the UUID from Sonatype, not the domain
+            // Get it from: https://central.sonatype.com/ -> Staging Profiles
+            // Or leave it out to auto-detect by groupId
+            // If you have a staging profile UUID, uncomment and set it:
+            // stagingProfileId.set('xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx')
+        }
+    }
+}
+
+// Configure signing for Maven Central
+signing {
+    useInMemoryPgpKeys( project.findProperty('signing.key'), project.findProperty('signing.password') )
+    sign publishing.publications
+}
+
+// Configure POM metadata for Maven Central (if publishing there)
+// The java-gradle-plugin automatically creates publications, configure them via afterEvaluate
+afterEvaluate {
+    publishing.publications.all {
+        if (it instanceof MavenPublication) {
+            it.pom {
+                name = 'Gradle NuGet Plugin'
+                description = 'Gradle plugin for NuGet, to package, upload artifacts and restore packages.'
+                url = 'https://github.com/i-net-software/gradle-nuget-plugin'
+                licenses {
+                    license {
+                        name = 'The Apache License, Version 2.0'
+                        url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'inetsoftware'
+                        name = 'i-net software'
+                    }
+                }
+                scm {
+                    connection = 'scm:git:git://github.com/i-net-software/gradle-nuget-plugin.git'
+                    developerConnection = 'scm:git:ssh://github.com/i-net-software/gradle-nuget-plugin.git'
+                    url = 'https://github.com/i-net-software/gradle-nuget-plugin'
+                }
+            }
+        }
+    }
+}

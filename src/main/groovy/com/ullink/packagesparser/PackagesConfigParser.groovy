@@ -1,5 +1,7 @@
 package com.ullink.packagesparser
 
+import groovy.xml.XmlParser
+
 class PackagesConfigParser implements NugetParser {
     @Override
     Collection getDependencies(File file) {

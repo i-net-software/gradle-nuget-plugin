@@ -1,4 +1,42 @@
-# Gradle NuGet Plugin [![Build status](https://ci.appveyor.com/api/projects/status/ua9pbginenbf1b1u/branch/master?svg=true)](https://ci.appveyor.com/project/gluck/gradle-nuget-plugin/branch/master) [![Build Status](https://travis-ci.org/Ullink/gradle-nuget-plugin.svg?branch=master)](https://travis-ci.org/Ullink/gradle-nuget-plugin)
+# Gradle NuGet Plugin
+
+> **Note:** This is a fork of the original [gradle-nuget-plugin](https://github.com/Ullink/gradle-nuget-plugin) by Ullink/i-net software, updated for **Gradle 9 compatibility** and published under the `de.inetsoftware` group ID.
+
+## Fork Information
+
+This fork maintains **forward compatibility** with the original plugin while providing:
+- **Gradle 9+ compatibility** - Fixed Groovy API compatibility issues
+- **Updated group ID** - Published as `de.inetsoftware.gradle:gradle-nuget-plugin`
+- **Updated plugin IDs** - Use `de.inetsoftware.nuget` instead of `com.ullink.nuget`
+- **All original functionality preserved** - Drop-in replacement for the original plugin
+
+### Migration from Original Plugin
+
+If you're using the original `com.ullink.gradle:gradle-nuget-plugin`, you can migrate to this fork by:
+
+1. **Update your buildscript dependency:**
+   ```groovy
+   buildscript {
+       dependencies {
+           classpath 'de.inetsoftware.gradle:gradle-nuget-plugin:2.24'
+       }
+   }
+   ```
+
+2. **Update plugin application:**
+   ```groovy
+   apply plugin: 'de.inetsoftware.nuget'
+   // or
+   plugins {
+       id 'de.inetsoftware.nuget' version '2.24'
+   }
+   ```
+
+All task names and configuration remain the same - only the plugin ID and group ID have changed.
+
+---
+
+## Overview
 
 This plugin allows to execute NuGet.exe from a gradle build.
 It also supports pack & push commands through built-in tasks, nugetPack, nugetPush & nugetRestore.
@@ -21,11 +59,11 @@ buildscript {
     }
 
     dependencies {
-        classpath "com.ullink.gradle:gradle-nuget-plugin:2.17"
+        classpath "de.inetsoftware.gradle:gradle-nuget-plugin:2.24"
     }
 }
 
-apply plugin: 'nuget'
+apply plugin: 'de.inetsoftware.nuget'
 
 nuget {
     // nuget.exe version to use, defaults to 4.9.4
@@ -114,6 +152,10 @@ Where
 [Gradle OpenCover plugin](https://github.com/Ullink/gradle-opencover-plugin) - Allows to execute the UTs through OpenCover for coverage reports.
 
 You can see these 4 plugins in use on [ILRepack](https://github.com/gluck/il-repack) project ([build.gradle](https://github.com/gluck/il-repack/blob/master/build.gradle)).
+
+# Original Plugin
+
+This is a fork of the original [gradle-nuget-plugin](https://github.com/Ullink/gradle-nuget-plugin) by Ullink/i-net software.
 
 # License
 
