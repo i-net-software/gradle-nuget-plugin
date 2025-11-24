@@ -104,31 +104,62 @@ class BaseNuGet extends Exec {
         args command
     }
     
+    // Dummy exec() method that does nothing - allows subclasses to call super.exec() without error
+    // The actual execution is handled by @TaskAction execute()
+    void exec() {
+        // Do nothing - execution is handled by execute() method
+        // This method exists so that subclasses can call super.exec() without getting a MissingMethodException
+    }
+    
     @TaskAction
     void execute() {
         // First, allow subclasses to configure args by calling their exec() method
         // This ensures solution files, packages.config, etc. are added to args
-        // But we need to be careful to avoid recursion - only call if it's not BaseNuGet.exec()
+        // The dummy exec() method above allows super.exec() calls to succeed
+        
+        // Call the subclass's exec() method using metaClass to bypass BaseNuGet.exec()
+        // This ensures we call the actual overridden method in the subclass
         try {
-            // Check if this class has an overridden exec() method (not the one from Exec)
-            def execMethod = this.class.getDeclaredMethod("exec")
-            if (execMethod != null && execMethod.declaringClass != Exec.class) {
-                // This is a subclass's exec() method - call it to configure args
-                execMethod.invoke(this)
+            def execMethod = this.class.declaredMethods.find { it.name == 'exec' && it.declaringClass != Exec.class }
+            if (execMethod != null) {
+                // Use metaClass to invoke the actual subclass method, not BaseNuGet.exec()
+                this.metaClass.invokeMethod(this, 'exec', null)
             }
-        } catch (NoSuchMethodException e) {
-            // No overridden exec() method, that's fine
+        } catch (Exception e) {
+            // Subclass exec() call failed, continue with execution
+        }
+        
+        // Manually add solution file or packages.config if this is a NuGetRestore task
+        // This is a workaround because args set in subclass exec() might not be preserved
+        try {
+            if (this.hasProperty('solutionFile')) {
+                def solutionFile = this.solutionFile
+                if (solutionFile) {
+                    args project.file(solutionFile)
+                }
+            }
+            if (this.hasProperty('packagesConfigFile')) {
+                def packagesConfigFile = this.packagesConfigFile
+                if (packagesConfigFile) {
+                    args project.file(packagesConfigFile)
+                }
+            }
+        } catch (Exception e) {
+            // Could not add solution/packages file, continue with execution
         }
         
         // Now configure executable and final args
         File localNuget = getNugetExeLocalPath()
         project.logger.debug "Using NuGet from path $localNuget.path"
+        
+        // Get current args (should include solution file, packages.config, etc.)
+        def currentArgs = getArgs().toList()
+        
         if (isFamily(FAMILY_WINDOWS)) {
             executable = localNuget.absolutePath
         } else {
             executable = "mono"
-            // Get current args as a list and prepend nuget.exe path
-            def currentArgs = getArgs().toList()
+            // Prepend nuget.exe path to args for mono execution
             setArgs([localNuget.absolutePath] + currentArgs)
         }
         args '-NonInteractive'

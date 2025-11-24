@@ -1,6 +1,6 @@
 # gradle-nuget-plugin changelog
 
-## 2.24 (Unreleased)
+## 2.24
 
 ### Fixed
 * Fixed stack overflow in Gradle 8 when calling `super.exec()` by using `@TaskAction` instead of overriding `exec()`
