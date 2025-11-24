@@ -16,6 +16,8 @@ import javax.inject.Inject
 class NuGetSpec extends Exec {
     private final ObjectFactory objectFactory
     private final ExecActionFactory execActionFactory
+    private ObjectFactory cachedObjectFactory
+    private ExecActionFactory cachedExecActionFactory
 
     @Inject
     NuGetSpec(ObjectFactory objectFactory, ExecActionFactory execActionFactory) {
@@ -24,17 +26,43 @@ class NuGetSpec extends Exec {
     }
 
     NuGetSpec() {
-        // Default constructor for compatibility
+        // Default constructor for compatibility with Gradle 8
+        this.objectFactory = null
+        this.execActionFactory = null
     }
 
-    @Override
+    // Only provide these for Gradle 9+ compatibility
+    // Use lazy initialization with caching to avoid StackOverflow in Gradle 8
     ObjectFactory getObjectFactory() {
-        return objectFactory ?: project.objects
+        if (objectFactory != null) {
+            return objectFactory
+        }
+        if (cachedObjectFactory != null) {
+            return cachedObjectFactory
+        }
+        try {
+            cachedObjectFactory = project.objects
+            return cachedObjectFactory
+        } catch (Exception e) {
+            // If we can't access it, return null (Gradle 8 compatibility)
+        }
+        return null
     }
 
-    @Override
     ExecActionFactory getExecActionFactory() {
-        return execActionFactory ?: project.services.get(ExecActionFactory.class)
+        if (execActionFactory != null) {
+            return execActionFactory
+        }
+        if (cachedExecActionFactory != null) {
+            return cachedExecActionFactory
+        }
+        try {
+            cachedExecActionFactory = project.services.get(ExecActionFactory.class)
+            return cachedExecActionFactory
+        } catch (Exception e) {
+            // If we can't access it, return null (Gradle 8 compatibility)
+        }
+        return null
     }
 
     def nuspecFile

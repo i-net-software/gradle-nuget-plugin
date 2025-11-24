@@ -1,5 +1,13 @@
 # gradle-nuget-plugin changelog
 
+## 2.24 (Unreleased)
+
+### Fixed
+* Fixed stack overflow in Gradle 8 when calling `super.exec()` by using `@TaskAction` instead of overriding `exec()`
+* Fixed constructor injection compatibility for both Gradle 8 (no injection) and Gradle 9+ (with injection)
+* Fixed `nugetExePath` resolution to use project directory instead of Gradle daemon working directory
+* Changed private helper methods to `protected @Internal` for Gradle 9 task validation
+
 ## 2.22
 ### Fixed
 * Nuspec cannot be regard as Input since closure can't be serialized

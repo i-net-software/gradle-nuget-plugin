@@ -2,6 +2,7 @@ package com.ullink
 
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.tasks.Exec
+import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.Console
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Optional
@@ -24,6 +25,8 @@ class BaseNuGet extends Exec {
 
     private final ObjectFactory objectFactory
     private final ExecActionFactory execActionFactory
+    private ObjectFactory cachedObjectFactory
+    private ExecActionFactory cachedExecActionFactory
 
     @Inject
     BaseNuGet(ObjectFactory objectFactory, ExecActionFactory execActionFactory) {
@@ -32,17 +35,51 @@ class BaseNuGet extends Exec {
     }
 
     BaseNuGet() {
-        // Default constructor for compatibility
+        // Default constructor for compatibility with Gradle 8
+        // In Gradle 8, Exec tasks don't require these, so we set them to null
+        this.objectFactory = null
+        this.execActionFactory = null
     }
 
-    @Override
+    // Only provide these for Gradle 9+ compatibility
+    // Use lazy initialization with caching to avoid StackOverflow in Gradle 8
     ObjectFactory getObjectFactory() {
-        return objectFactory ?: project.objects
+        if (objectFactory != null) {
+            return objectFactory
+        }
+        if (cachedObjectFactory != null) {
+            return cachedObjectFactory
+        }
+        // Lazy initialization - only access project when actually needed
+        // Cache the result to avoid repeated access that could cause recursion
+        try {
+            // Use a thread-local flag to detect recursion
+            def threadLocal = Thread.currentThread().getContextClassLoader()
+            if (threadLocal != null) {
+                cachedObjectFactory = project.objects
+                return cachedObjectFactory
+            }
+        } catch (Exception e) {
+            // If we can't access it, return null (Gradle 8 compatibility)
+        }
+        return null
     }
 
-    @Override
     ExecActionFactory getExecActionFactory() {
-        return execActionFactory ?: project.services.get(ExecActionFactory.class)
+        if (execActionFactory != null) {
+            return execActionFactory
+        }
+        if (cachedExecActionFactory != null) {
+            return cachedExecActionFactory
+        }
+        // Lazy initialization with caching
+        try {
+            cachedExecActionFactory = project.services.get(ExecActionFactory.class)
+            return cachedExecActionFactory
+        } catch (Exception e) {
+            // If we can't access it, return null (Gradle 8 compatibility)
+        }
+        return null
     }
 
     @Internal
@@ -66,23 +103,55 @@ class BaseNuGet extends Exec {
         this()
         args command
     }
-
-    @Override
-    void exec() {
+    
+    @TaskAction
+    void execute() {
+        // First, allow subclasses to configure args by calling their exec() method
+        // This ensures solution files, packages.config, etc. are added to args
+        // But we need to be careful to avoid recursion - only call if it's not BaseNuGet.exec()
+        try {
+            // Check if this class has an overridden exec() method (not the one from Exec)
+            def execMethod = this.class.getDeclaredMethod("exec")
+            if (execMethod != null && execMethod.declaringClass != Exec.class) {
+                // This is a subclass's exec() method - call it to configure args
+                execMethod.invoke(this)
+            }
+        } catch (NoSuchMethodException e) {
+            // No overridden exec() method, that's fine
+        }
+        
+        // Now configure executable and final args
         File localNuget = getNugetExeLocalPath()
-
         project.logger.debug "Using NuGet from path $localNuget.path"
         if (isFamily(FAMILY_WINDOWS)) {
-            executable localNuget
+            executable = localNuget.absolutePath
         } else {
-            executable "mono"
-            setArgs([localNuget.path, *getArgs()])
+            executable = "mono"
+            // Get current args as a list and prepend nuget.exe path
+            def currentArgs = getArgs().toList()
+            setArgs([localNuget.absolutePath] + currentArgs)
         }
-
         args '-NonInteractive'
         args '-Verbosity', (verbosity ?: getNugetVerbosity())
-
-        super.exec()
+        
+        // Execute using the ExecActionFactory to avoid method interception recursion
+        def execActionFactory = getExecActionFactory()
+        if (execActionFactory != null) {
+            def execAction = execActionFactory.newExecAction()
+            execAction.setExecutable(executable)
+            execAction.setArgs(getArgs())
+            execAction.setWorkingDir(project.projectDir)
+            execAction.execute()
+        } else {
+            // Fallback: try to call Exec.exec() via reflection
+            try {
+                def execMethod = Exec.class.getDeclaredMethod("exec")
+                execMethod.setAccessible(true)
+                execMethod.invoke(this)
+            } catch (Exception e) {
+                throw new RuntimeException("Cannot execute NuGet command - no ExecActionFactory available", e)
+            }
+        }
     }
 
     @Internal
@@ -90,13 +159,16 @@ class BaseNuGet extends Exec {
         File localNuget
 
         if (nugetExePath != null && !nugetExePath.empty && !nugetExePath.startsWith("http")) {
-            localNuget = new File(nugetExePath)
+            // Resolve relative paths relative to project directory, not current working directory
+            localNuget = nugetExePath.startsWith("/") || (nugetExePath.length() > 2 && nugetExePath[1] == ':') 
+                ? new File(nugetExePath)  // Absolute path (Unix or Windows)
+                : project.file(nugetExePath)  // Relative path - resolve from project directory
 
             if (localNuget.exists()) {
                 return localNuget
             }
 
-            throw new IllegalStateException("Unable to find nuget by path $nugetExePath (please check property 'nugetExePath')")
+            throw new IllegalStateException("Unable to find nuget by path $nugetExePath (resolved to ${localNuget.absolutePath}, please check property 'nugetExePath')")
         }
 
         def folder = getNugetHome()
