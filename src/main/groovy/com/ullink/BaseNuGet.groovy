@@ -172,7 +172,22 @@ class BaseNuGet extends Exec {
             execAction.setExecutable(executable)
             execAction.setArgs(getArgs())
             execAction.setWorkingDir(project.projectDir)
-            execAction.execute()
+            
+            // Check if we should ignore failures on non-Windows (for Mono xbuild issues)
+            def shouldIgnoreFailures = false
+            if (this.hasProperty('ignoreFailuresOnNonWindows') && this.ignoreFailuresOnNonWindows) {
+                shouldIgnoreFailures = !isFamily(FAMILY_WINDOWS)
+            }
+            
+            try {
+                execAction.execute()
+            } catch (Exception e) {
+                if (shouldIgnoreFailures) {
+                    project.logger.warn("NuGet restore failed on non-Windows platform (likely Mono xbuild issue), ignoring: ${e.message}")
+                    return
+                }
+                throw e
+            }
         } else {
             // Fallback: try to call Exec.exec() via reflection
             try {
@@ -180,6 +195,15 @@ class BaseNuGet extends Exec {
                 execMethod.setAccessible(true)
                 execMethod.invoke(this)
             } catch (Exception e) {
+                // Check if we should ignore failures on non-Windows
+                def shouldIgnoreFailures = false
+                if (this.hasProperty('ignoreFailuresOnNonWindows') && this.ignoreFailuresOnNonWindows) {
+                    shouldIgnoreFailures = !isFamily(FAMILY_WINDOWS)
+                }
+                if (shouldIgnoreFailures) {
+                    project.logger.warn("NuGet restore failed on non-Windows platform (likely Mono xbuild issue), ignoring: ${e.message}")
+                    return
+                }
                 throw new RuntimeException("Cannot execute NuGet command - no ExecActionFactory available", e)
             }
         }

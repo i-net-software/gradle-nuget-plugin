@@ -7,6 +7,8 @@ import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
 
+import static org.apache.tools.ant.taskdefs.condition.Os.*
+
 class NuGetRestore extends BaseNuGet {
 
     @Optional
@@ -36,6 +38,8 @@ class NuGetRestore extends BaseNuGet {
     @Optional
     @Input
     def packagesDirectory
+    @Input
+    def ignoreFailuresOnNonWindows = false
 
     NuGetRestore() {
         super('restore')
@@ -81,8 +85,15 @@ class NuGetRestore extends BaseNuGet {
         if (packagesDirectory) args '-PackagesDirectory', packagesDirectory
         if (solutionDirectory) args '-SolutionDirectory', solutionDirectory
         if (disableParallelProcessing) args '-DisableParallelProcessing'
-        if (!msBuildVersion) msBuildVersion = GradleHelper.getPropertyFromTask(project, 'version', 'msbuild')
-        if (msBuildVersion) args '-MsBuildVersion', msBuildVersion
+        
+        // Skip MSBuildVersion on non-Windows platforms (macOS/Linux) because Mono's xbuild/MSBuild
+        // doesn't work properly with NuGet restore and causes "Too many project files specified" errors
+        if (!isFamily(FAMILY_WINDOWS)) {
+            project.logger.debug("Skipping MSBuildVersion on non-Windows platform to avoid Mono xbuild issues")
+        } else {
+            if (!msBuildVersion) msBuildVersion = GradleHelper.getPropertyFromTask(project, 'version', 'msbuild')
+            if (msBuildVersion) args '-MsBuildVersion', msBuildVersion
+        }
 
         project.logger.info "Restoring NuGet packages " +
             (sources ? "from $sources" : '') +
