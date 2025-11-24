@@ -165,46 +165,53 @@ class BaseNuGet extends Exec {
         args '-NonInteractive'
         args '-Verbosity', (verbosity ?: getNugetVerbosity())
         
-        // Execute using the ExecActionFactory to avoid method interception recursion
-        def execActionFactory = getExecActionFactory()
-        if (execActionFactory != null) {
-            def execAction = execActionFactory.newExecAction()
-            execAction.setExecutable(executable)
-            execAction.setArgs(getArgs())
-            execAction.setWorkingDir(project.projectDir)
-            
-            // Check if we should ignore failures on non-Windows (for Mono xbuild issues)
-            def shouldIgnoreFailures = false
+        // Check if we should ignore failures on non-Windows (for Mono xbuild issues)
+        // Set ignoreExitValue on the Exec task itself before execution
+        def shouldIgnoreFailures = false
+        try {
             if (this.hasProperty('ignoreFailuresOnNonWindows') && this.ignoreFailuresOnNonWindows) {
                 shouldIgnoreFailures = !isFamily(FAMILY_WINDOWS)
-            }
-            
-            try {
-                execAction.execute()
-            } catch (Exception e) {
                 if (shouldIgnoreFailures) {
-                    project.logger.warn("NuGet restore failed on non-Windows platform (likely Mono xbuild issue), ignoring: ${e.message}")
-                    return
+                    project.logger.debug("Will ignore failures on non-Windows platform")
+                    // Use the Exec task's built-in ignoreExitValue property
+                    this.ignoreExitValue = true
                 }
-                throw e
             }
-        } else {
-            // Fallback: try to call Exec.exec() via reflection
+        } catch (Exception e) {
+            project.logger.debug("Could not check ignoreFailuresOnNonWindows: ${e.message}")
+        }
+        
+        // Execute using the ExecActionFactory to avoid method interception recursion
+        // However, if we need to ignore exit values, we must use the Exec task's built-in execution
+        // because ExecAction doesn't respect the Exec task's ignoreExitValue property
+        if (shouldIgnoreFailures) {
+            // Use Exec task's built-in execution when ignoring failures (respects ignoreExitValue)
             try {
                 def execMethod = Exec.class.getDeclaredMethod("exec")
                 execMethod.setAccessible(true)
                 execMethod.invoke(this)
-            } catch (Exception e) {
-                // Check if we should ignore failures on non-Windows
-                def shouldIgnoreFailures = false
-                if (this.hasProperty('ignoreFailuresOnNonWindows') && this.ignoreFailuresOnNonWindows) {
-                    shouldIgnoreFailures = !isFamily(FAMILY_WINDOWS)
+            } catch (Throwable e) {
+                project.logger.warn("NuGet restore failed on non-Windows platform (likely Mono xbuild issue), ignoring: ${e.class.simpleName}: ${e.message}")
+                return
+            }
+        } else {
+            // Use ExecActionFactory for normal execution (avoids stack overflow in Gradle 8)
+            def execActionFactory = getExecActionFactory()
+            if (execActionFactory != null) {
+                def execAction = execActionFactory.newExecAction()
+                execAction.setExecutable(executable)
+                execAction.setArgs(getArgs())
+                execAction.setWorkingDir(project.projectDir)
+                execAction.execute()
+            } else {
+                // Fallback: try to call Exec.exec() via reflection
+                try {
+                    def execMethod = Exec.class.getDeclaredMethod("exec")
+                    execMethod.setAccessible(true)
+                    execMethod.invoke(this)
+                } catch (Exception e) {
+                    throw new RuntimeException("Cannot execute NuGet command - no ExecActionFactory available", e)
                 }
-                if (shouldIgnoreFailures) {
-                    project.logger.warn("NuGet restore failed on non-Windows platform (likely Mono xbuild issue), ignoring: ${e.message}")
-                    return
-                }
-                throw new RuntimeException("Cannot execute NuGet command - no ExecActionFactory available", e)
             }
         }
     }

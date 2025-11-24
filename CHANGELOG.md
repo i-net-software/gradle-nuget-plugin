@@ -2,11 +2,17 @@
 
 ## 2.24
 
+### Added
+* Auto-detection of modern .NET SDK MSBuild on macOS/Linux platforms
+* Added `msBuildPath` property to `NuGetRestore` task for explicit MSBuild path configuration
+* Added `ignoreFailuresOnNonWindows` property to `NuGetRestore` task to gracefully handle Mono xbuild limitations
+
 ### Fixed
 * Fixed stack overflow in Gradle 8 when calling `super.exec()` by using `@TaskAction` instead of overriding `exec()`
 * Fixed constructor injection compatibility for both Gradle 8 (no injection) and Gradle 9+ (with injection)
 * Fixed `nugetExePath` resolution to use project directory instead of Gradle daemon working directory
 * Changed private helper methods to `protected @Internal` for Gradle 9 task validation
+* Improved MSBuild handling on non-Windows platforms by auto-detecting dotnet SDK and using `ignoreExitValue` when configured
 
 ## 2.22
 ### Fixed

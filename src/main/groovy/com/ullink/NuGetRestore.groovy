@@ -4,6 +4,7 @@ import com.ullink.util.GradleHelper
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
 
@@ -35,6 +36,9 @@ class NuGetRestore extends BaseNuGet {
     @Optional
     @Input
     def msBuildVersion
+    @Optional
+    @Input
+    def msBuildPath
     @Optional
     @Input
     def packagesDirectory
@@ -86,13 +90,38 @@ class NuGetRestore extends BaseNuGet {
         if (solutionDirectory) args '-SolutionDirectory', solutionDirectory
         if (disableParallelProcessing) args '-DisableParallelProcessing'
         
-        // Skip MSBuildVersion on non-Windows platforms (macOS/Linux) because Mono's xbuild/MSBuild
-        // doesn't work properly with NuGet restore and causes "Too many project files specified" errors
+        // On non-Windows platforms, try to use modern .NET SDK's MSBuild if available
         if (!isFamily(FAMILY_WINDOWS)) {
-            project.logger.debug("Skipping MSBuildVersion on non-Windows platform to avoid Mono xbuild issues")
+            // If msBuildPath is not explicitly set, try to auto-detect dotnet SDK MSBuild
+            if (!msBuildPath) {
+                def dotnetPath = findDotnetPath()
+                if (dotnetPath) {
+                    def dotnetMsbuildPath = findDotnetMsbuildPath(dotnetPath)
+                    if (dotnetMsbuildPath) {
+                        msBuildPath = dotnetMsbuildPath
+                        project.logger.debug("Auto-detected dotnet MSBuild at: ${msBuildPath}")
+                    }
+                }
+            }
+            
+            // Use MSBuildPath if available (takes precedence over MSBuildVersion)
+            if (msBuildPath) {
+                args '-MSBuildPath', msBuildPath
+                project.logger.debug("Using MSBuildPath: ${msBuildPath}")
+            } else {
+                // Skip MSBuildVersion on non-Windows if no MSBuildPath found
+                // because Mono's xbuild/MSBuild doesn't work properly with NuGet restore
+                project.logger.debug("Skipping MSBuildVersion on non-Windows platform (no dotnet MSBuild found)")
+            }
         } else {
+            // On Windows, use MSBuildVersion as before
             if (!msBuildVersion) msBuildVersion = GradleHelper.getPropertyFromTask(project, 'version', 'msbuild')
             if (msBuildVersion) args '-MsBuildVersion', msBuildVersion
+        }
+        
+        // MSBuildPath can also be explicitly set on Windows
+        if (msBuildPath) {
+            args '-MSBuildPath', msBuildPath
         }
 
         project.logger.info "Restoring NuGet packages " +
@@ -115,5 +144,89 @@ class NuGetRestore extends BaseNuGet {
         // Otherwise use '.\packages'
         def solutionDir = solutionFile ? project.file(solutionFile.getParent()) : solutionDirectory
         return new File(solutionDir ? solutionDir.toString() : '.', 'packages')
+    }
+    
+    /**
+     * Find the dotnet executable path
+     */
+    private String findDotnetPath() {
+        try {
+            def process = ['which', 'dotnet'].execute()
+            process.waitFor()
+            if (process.exitValue() == 0) {
+                return process.text.trim()
+            }
+        } catch (Exception e) {
+            // dotnet not found
+        }
+        return null
+    }
+    
+    /**
+     * Find the MSBuild.dll path in the dotnet SDK
+     */
+    private String findDotnetMsbuildPath(String dotnetPath) {
+        try {
+            // Get dotnet SDK path
+            def process = [dotnetPath, '--info'].execute()
+            process.waitFor()
+            def output = process.text
+            
+            // Look for SDK base path
+            def sdkBasePath = null
+            output.eachLine { line ->
+                if (line.contains('Base Path:') || line.contains('SDK Base Path:')) {
+                    def path = line.split(':')[1]?.trim()
+                    if (path) {
+                        sdkBasePath = path
+                    }
+                }
+            }
+            
+            if (sdkBasePath) {
+                // Try to find MSBuild.dll in the SDK
+                def msbuildDll = new File(sdkBasePath, 'MSBuild.dll')
+                if (msbuildDll.exists()) {
+                    return msbuildDll.parentFile.absolutePath
+                }
+                
+                // Alternative: look in Current/MSBuild directory
+                def currentMsbuild = new File(sdkBasePath, 'Current/MSBuild.dll')
+                if (currentMsbuild.exists()) {
+                    return currentMsbuild.parentFile.absolutePath
+                }
+            }
+            
+            // Fallback: try common SDK locations
+            def commonPaths = [
+                '/usr/local/share/dotnet/sdk',
+                '/usr/share/dotnet/sdk',
+                System.getProperty('user.home') + '/.dotnet/sdk'
+            ]
+            
+            for (def basePath : commonPaths) {
+                def sdkDir = new File(basePath)
+                if (sdkDir.exists() && sdkDir.isDirectory()) {
+                    // Find the highest version SDK
+                    def sdkVersions = sdkDir.listFiles().findAll { it.isDirectory() && it.name.matches(/^\d+\.\d+\.\d+.*/) }
+                    if (sdkVersions) {
+                        sdkVersions.sort { a, b -> 
+                            // Simple version comparison
+                            def aVer = a.name.split(/[.-]/).collect { it.toInteger() }
+                            def bVer = b.name.split(/[.-]/).collect { it.toInteger() }
+                            return bVer <=> aVer
+                        }
+                        def latestSdk = sdkVersions[0]
+                        def msbuildDll = new File(latestSdk, 'MSBuild.dll')
+                        if (msbuildDll.exists()) {
+                            return msbuildDll.parentFile.absolutePath
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            project.logger.debug("Could not find dotnet MSBuild: ${e.message}")
+        }
+        return null
     }
 }
