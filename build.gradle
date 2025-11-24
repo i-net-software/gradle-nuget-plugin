@@ -85,6 +85,12 @@ nexusPublishing {
     }
 }
 
+closeStagingRepositories {
+    closeStagingRepositories.dependsOn 'publishToSonatype'
+    publish.finalizedBy 'closeStagingRepositories'
+}
+
+
 // Configure signing for Maven Central
 signing {
     useInMemoryPgpKeys( project.findProperty('signing.key'), project.findProperty('signing.password') )
