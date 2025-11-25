@@ -34,6 +34,9 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
       
+      - name: Update Gradle wrapper to ${{ matrix.gradle-version }}
+        run: gradle wrapper --gradle-version ${{ matrix.gradle-version }} --no-daemon
+      
       - name: Cache Gradle dependencies
         uses: actions/cache@v3
         with:
@@ -44,9 +47,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-${{ matrix.gradle-version }}-
             ${{ runner.os }}-gradle-
-      
-      - name: Update Gradle wrapper to ${{ matrix.gradle-version }}
-        run: ./gradlew wrapper --gradle-version ${{ matrix.gradle-version }} --no-daemon
       
       - name: Run tests with Gradle ${{ matrix.gradle-version }}
         run: ./gradlew clean test --no-daemon
