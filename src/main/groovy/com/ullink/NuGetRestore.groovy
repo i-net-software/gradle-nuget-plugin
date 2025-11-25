@@ -44,6 +44,8 @@ class NuGetRestore extends BaseNuGet {
     def packagesDirectory
     @Input
     def ignoreFailuresOnNonWindows = false
+    @Input
+    def useDotnetRestore = false  // Set to true to use 'dotnet restore' instead of 'nuget.exe' on non-Windows
 
     NuGetRestore() {
         super('restore')
@@ -106,38 +108,22 @@ class NuGetRestore extends BaseNuGet {
         if (solutionDirectory) args '-SolutionDirectory', solutionDirectory
         if (disableParallelProcessing) args '-DisableParallelProcessing'
         
-        // On non-Windows platforms, try to use modern .NET SDK's MSBuild if available
+        // On non-Windows platforms, skip MSBuildPath to avoid Mono/.NET SDK assembly loading issues
+        // When nuget.exe runs under Mono, it cannot load .NET SDK assemblies (e.g., .NET 7.0's Microsoft.Build.dll)
+        // So we skip -MSBuildPath on non-Windows to let NuGet use Mono's xbuild/MSBuild by default
         if (!isFamily(FAMILY_WINDOWS)) {
-            // If msBuildPath is not explicitly set, try to auto-detect dotnet SDK MSBuild
-            if (!msBuildPath) {
-                def dotnetPath = findDotnetPath()
-                if (dotnetPath) {
-                    def dotnetMsbuildPath = findDotnetMsbuildPath(dotnetPath)
-                    if (dotnetMsbuildPath) {
-                        msBuildPath = dotnetMsbuildPath
-                        project.logger.debug("Auto-detected dotnet MSBuild at: ${msBuildPath}")
-                    }
-                }
-            }
-            
-            // Use MSBuildPath if available (takes precedence over MSBuildVersion)
-            if (msBuildPath) {
-                args '-MSBuildPath', msBuildPath
-                project.logger.debug("Using MSBuildPath: ${msBuildPath}")
-            } else {
-                // Skip MSBuildVersion on non-Windows if no MSBuildPath found
-                // because Mono's xbuild/MSBuild doesn't work properly with NuGet restore
-                project.logger.debug("Skipping MSBuildVersion on non-Windows platform (no dotnet MSBuild found)")
-            }
+            // Skip MSBuildPath on non-Windows to avoid assembly loading errors
+            // If useDotnetRestore=true, BaseNuGet will use 'dotnet restore' which handles MSBuild automatically
+            project.logger.debug("Skipping MSBuildPath on non-Windows platform (NuGet will use Mono's xbuild/MSBuild)")
         } else {
             // On Windows, use MSBuildVersion as before
             if (!msBuildVersion) msBuildVersion = GradleHelper.getPropertyFromTask(project, 'version', 'msbuild')
             if (msBuildVersion) args '-MsBuildVersion', msBuildVersion
-        }
-        
-        // MSBuildPath can also be explicitly set on Windows
-        if (msBuildPath) {
-            args '-MSBuildPath', msBuildPath
+            
+            // MSBuildPath can also be explicitly set on Windows
+            if (msBuildPath) {
+                args '-MSBuildPath', msBuildPath
+            }
         }
 
         project.logger.info "Restoring NuGet packages " +
@@ -160,22 +146,6 @@ class NuGetRestore extends BaseNuGet {
         // Otherwise use '.\packages'
         def solutionDir = solutionFile ? project.file(solutionFile.getParent()) : solutionDirectory
         return new File(solutionDir ? solutionDir.toString() : '.', 'packages')
-    }
-    
-    /**
-     * Find the dotnet executable path
-     */
-    private String findDotnetPath() {
-        try {
-            def process = ['which', 'dotnet'].execute()
-            process.waitFor()
-            if (process.exitValue() == 0) {
-                return process.text.trim()
-            }
-        } catch (Exception e) {
-            // dotnet not found
-        }
-        return null
     }
     
     /**

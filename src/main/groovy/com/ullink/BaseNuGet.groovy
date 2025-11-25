@@ -215,17 +215,90 @@ class BaseNuGet extends Exec {
         // Set deduplicated args
         setArgs(normalizedArgs)
         
-        if (isFamily(FAMILY_WINDOWS)) {
-            executable = localNuget.absolutePath
-        } else {
-            executable = "mono"
-            // Prepend nuget.exe path to args for mono execution
-            setArgs([localNuget.absolutePath] + normalizedArgs)
+        // Check if we should use dotnet restore instead of nuget.exe on non-Windows
+        // Only use dotnet restore if explicitly enabled via useDotnetRestore property
+        def useDotnetRestore = false
+        if (!isFamily(FAMILY_WINDOWS) && this instanceof NuGetRestore) {
+            try {
+                if (this.hasProperty('useDotnetRestore') && this.useDotnetRestore) {
+                    def dotnetPath = findDotnetPath()
+                    if (dotnetPath) {
+                        useDotnetRestore = true
+                    } else {
+                        project.logger.warn("useDotnetRestore is enabled but 'dotnet' command not found. Falling back to nuget.exe with Mono.")
+                    }
+                }
+            } catch (Exception e) {
+                project.logger.debug("Could not check useDotnetRestore property: ${e.message}")
+            }
+            
+            if (useDotnetRestore) {
+                executable = dotnetPath
+                // Convert nuget.exe restore args to dotnet restore args
+                def dotnetArgs = ['restore']
+                // Add solution file if present
+                if (this.hasProperty('solutionFile') && this.solutionFile) {
+                    def solutionPath = this.solutionFile instanceof File ? this.solutionFile.absolutePath : project.file(this.solutionFile).absolutePath
+                    dotnetArgs.add(solutionPath)
+                }
+                // Add packages.config file if present (dotnet restore doesn't support this directly, but we'll try)
+                if (this.hasProperty('packagesConfigFile') && this.packagesConfigFile) {
+                    project.logger.warn("packages.config files are not directly supported by 'dotnet restore'. Consider migrating to PackageReference format.")
+                }
+                // Add sources
+                if (this.hasProperty('sources') && !this.sources.isEmpty()) {
+                    this.sources.each { source ->
+                        dotnetArgs.add('--source')
+                        dotnetArgs.add(source)
+                    }
+                }
+                // Add config file
+                if (this.hasProperty('configFile') && this.configFile) {
+                    dotnetArgs.add('--configfile')
+                    dotnetArgs.add(this.configFile.absolutePath)
+                }
+                // Add packages directory
+                if (this.hasProperty('packagesDirectory') && this.packagesDirectory) {
+                    dotnetArgs.add('--packages')
+                    dotnetArgs.add(this.packagesDirectory)
+                }
+                // Add solution directory
+                if (this.hasProperty('solutionDirectory') && this.solutionDirectory) {
+                    dotnetArgs.add('--solution-directory')
+                    dotnetArgs.add(this.solutionDirectory.absolutePath)
+                }
+                // Disable parallel processing
+                if (this.hasProperty('disableParallelProcessing') && this.disableParallelProcessing) {
+                    dotnetArgs.add('--no-parallel')
+                }
+                setArgs(dotnetArgs)
+                project.logger.info("Using 'dotnet restore' instead of 'nuget.exe' (dotnet SDK detected)")
+            }
         }
         
-        // Add flags after setting the base args
-        args '-NonInteractive'
-        args '-Verbosity', (verbosity ?: getNugetVerbosity())
+        if (!useDotnetRestore) {
+            if (isFamily(FAMILY_WINDOWS)) {
+                executable = localNuget.absolutePath
+            } else {
+                executable = "mono"
+                // Prepend nuget.exe path to args for mono execution
+                setArgs([localNuget.absolutePath] + normalizedArgs)
+            }
+            
+            // Add nuget.exe-specific flags (not needed for dotnet restore)
+            args '-NonInteractive'
+            args '-Verbosity', (verbosity ?: getNugetVerbosity())
+        } else {
+            // For dotnet restore, add verbosity if needed (different format)
+            def verbosityLevel = verbosity ?: getNugetVerbosity()
+            if (verbosityLevel == 'detailed') {
+                args '--verbosity', 'detailed'
+            } else if (verbosityLevel == 'normal') {
+                args '--verbosity', 'normal'
+            } else if (verbosityLevel == 'quiet') {
+                args '--verbosity', 'quiet'
+            }
+        }
         
         project.logger.info("Final args before execution: ${getArgs().toList()}")
         
@@ -358,5 +431,21 @@ class BaseNuGet extends Exec {
         if (logger.debugEnabled) return 'detailed'
         if (logger.infoEnabled) return 'normal'
         return 'quiet'
+    }
+    
+    /**
+     * Find the dotnet executable path (for use with dotnet restore)
+     */
+    protected String findDotnetPath() {
+        try {
+            def process = ['which', 'dotnet'].execute()
+            process.waitFor()
+            if (process.exitValue() == 0) {
+                return process.text.trim()
+            }
+        } catch (Exception e) {
+            // dotnet not found
+        }
+        return null
     }
 }
