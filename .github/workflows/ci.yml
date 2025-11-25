@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         java-version: ['17', '21']
-        gradle-version: ['8.5', '9.2']
+        gradle-version: ['8.3', '8.14.3', '9.2.1']
     
     steps:
       - name: Checkout code
@@ -62,7 +62,7 @@ jobs:
           retention-days: 7
       
       - name: Upload build artifacts
-        if: matrix.java-version == '17' && matrix.gradle-version == '9.2'
+        if: matrix.java-version == '17' && matrix.gradle-version == '9.2.1'
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
