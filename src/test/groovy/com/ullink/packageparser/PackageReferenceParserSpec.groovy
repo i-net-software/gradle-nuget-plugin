@@ -28,7 +28,7 @@ class PackageReferenceParserSpec extends Specification {
         def xml = new MarkupBuilder(writer)
         xml.dependencies() {
             result.each {
-                it.resolveStrategy = DELEGATE_FIRST
+                it.resolveStrategy = Closure.DELEGATE_FIRST
                 it.delegate = delegate
                 it.call()
             }

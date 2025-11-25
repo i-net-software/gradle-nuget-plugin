@@ -98,7 +98,7 @@ class NuGetSpec extends Exec {
                 visitor = { entry ->
                     switch (entry) {
                         case Closure:
-                            entry.resolveStrategy = DELEGATE_FIRST
+                            entry.resolveStrategy = Closure.DELEGATE_FIRST
                             entry.delegate = delegate
                             entry.call()
                             break
