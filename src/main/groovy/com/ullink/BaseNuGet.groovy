@@ -117,53 +117,117 @@ class BaseNuGet extends Exec {
         // This ensures solution files, packages.config, etc. are added to args
         // The dummy exec() method above allows super.exec() calls to succeed
         
+        // Get args BEFORE calling subclass exec() to see what's already there
+        def argsBeforeExec = getArgs().toList()
+        project.logger.info("Args BEFORE calling subclass exec(): ${argsBeforeExec}")
+        
+        // Check if solutionFile is set before calling exec()
+        try {
+            if (this.hasProperty('solutionFile')) {
+                project.logger.info("solutionFile property exists: ${this.solutionFile}")
+            } else {
+                project.logger.warn("solutionFile property does NOT exist on task")
+            }
+        } catch (Exception e) {
+            project.logger.debug("Could not check solutionFile property: ${e.message}")
+        }
+        
         // Call the subclass's exec() method using metaClass to bypass BaseNuGet.exec()
         // This ensures we call the actual overridden method in the subclass
         try {
-            def execMethod = this.class.declaredMethods.find { it.name == 'exec' && it.declaringClass != Exec.class }
+            // Check if this class (or any parent up to BaseNuGet) has an exec() method
+            def execMethod = null
+            def currentClass = this.class
+            while (currentClass != null && currentClass != BaseNuGet.class && currentClass != Exec.class) {
+                execMethod = currentClass.declaredMethods.find { it.name == 'exec' && it.parameterCount == 0 }
+                if (execMethod != null) break
+                currentClass = currentClass.superclass
+            }
+            
             if (execMethod != null) {
-                // Use metaClass to invoke the actual subclass method, not BaseNuGet.exec()
-                this.metaClass.invokeMethod(this, 'exec', null)
+                project.logger.info("Calling subclass exec() method: ${execMethod.declaringClass.simpleName}.exec()")
+                // Directly invoke the method using reflection to bypass Gradle's method interception
+                execMethod.invoke(this)
+            } else {
+                project.logger.warn("No exec() method found in subclass ${this.class.simpleName}")
             }
         } catch (Exception e) {
             // Subclass exec() call failed, continue with execution
+            project.logger.warn("Could not call subclass exec(): ${e.class.simpleName}: ${e.message}")
+            e.printStackTrace()
         }
         
-        // Manually add solution file or packages.config if this is a NuGetRestore task
-        // This is a workaround because args set in subclass exec() might not be preserved
-        try {
-            if (this.hasProperty('solutionFile')) {
-                def solutionFile = this.solutionFile
-                if (solutionFile) {
-                    args project.file(solutionFile)
-                }
-            }
-            if (this.hasProperty('packagesConfigFile')) {
-                def packagesConfigFile = this.packagesConfigFile
-                if (packagesConfigFile) {
-                    args project.file(packagesConfigFile)
-                }
-            }
-        } catch (Exception e) {
-            // Could not add solution/packages file, continue with execution
-        }
+        // Get args AFTER calling subclass exec() to see what was added
+        def argsAfterExec = getArgs().toList()
+        project.logger.info("Args AFTER calling subclass exec(): ${argsAfterExec}")
         
         // Now configure executable and final args
         File localNuget = getNugetExeLocalPath()
         project.logger.debug "Using NuGet from path $localNuget.path"
         
-        // Get current args (should include solution file, packages.config, etc.)
+        // Get current args (should include solution file, packages.config, etc. from subclass exec())
         def currentArgs = getArgs().toList()
+        project.logger.info("Args before deduplication: ${currentArgs}")
+        
+        // Build a set of expected file paths to ensure we only add them once
+        def expectedPaths = new HashSet()
+        try {
+            if (this.hasProperty('solutionFile') && this.solutionFile) {
+                def solutionFilePath = this.solutionFile instanceof File ? this.solutionFile.absolutePath : project.file(this.solutionFile).absolutePath
+                expectedPaths.add(solutionFilePath.replace('/', File.separator).toLowerCase())
+            }
+            if (this.hasProperty('packagesConfigFile') && this.packagesConfigFile) {
+                def packagesConfigFilePath = this.packagesConfigFile instanceof File ? this.packagesConfigFile.absolutePath : project.file(this.packagesConfigFile).absolutePath
+                expectedPaths.add(packagesConfigFilePath.replace('/', File.separator).toLowerCase())
+            }
+        } catch (Exception e) {
+            project.logger.debug("Could not determine expected paths: ${e.message}")
+        }
+        
+        // Remove duplicates from args - normalize paths and check for duplicates
+        // This is critical because the solution file might be added multiple times
+        def normalizedArgs = []
+        def seenPaths = new HashSet()
+        currentArgs.each { arg ->
+            def normalizedPath = arg instanceof File ? arg.absolutePath.replace('/', File.separator) : arg.toString().replace('/', File.separator)
+            def normalizedPathLower = normalizedPath.toLowerCase()
+            
+            // Skip if we've seen this exact path before
+            if (!seenPaths.contains(normalizedPathLower)) {
+                seenPaths.add(normalizedPathLower)
+                // Convert File objects to strings for consistent argument handling
+                normalizedArgs.add(arg instanceof File ? normalizedPath : arg)
+            } else {
+                project.logger.info("Skipping duplicate arg: ${normalizedPath}")
+            }
+        }
+        
+        // DO NOT manually add solution file or packages.config here
+        // The subclass exec() method should have already added them via args
+        // Adding them here would cause duplicates
+        // The deduplication above should handle any duplicates that were added
+        
+        project.logger.info("Args after deduplication: ${normalizedArgs}")
+        
+        // Clear all args first to avoid any accumulation issues
+        setArgs([])
+        
+        // Set deduplicated args
+        setArgs(normalizedArgs)
         
         if (isFamily(FAMILY_WINDOWS)) {
             executable = localNuget.absolutePath
         } else {
             executable = "mono"
             // Prepend nuget.exe path to args for mono execution
-            setArgs([localNuget.absolutePath] + currentArgs)
+            setArgs([localNuget.absolutePath] + normalizedArgs)
         }
+        
+        // Add flags after setting the base args
         args '-NonInteractive'
         args '-Verbosity', (verbosity ?: getNugetVerbosity())
+        
+        project.logger.info("Final args before execution: ${getArgs().toList()}")
         
         // Check if we should ignore failures on non-Windows (for Mono xbuild issues)
         // Set ignoreExitValue on the Exec task itself before execution

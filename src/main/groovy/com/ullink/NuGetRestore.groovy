@@ -79,8 +79,24 @@ class NuGetRestore extends BaseNuGet {
 
     @Override
     void exec() {
-        if (packagesConfigFile) args packagesConfigFile
-        if (solutionFile) args solutionFile
+        project.logger.info("NuGetRestore.exec() called - solutionFile: ${solutionFile}, packagesConfigFile: ${packagesConfigFile}")
+        
+        // Convert File objects to absolute paths for proper argument handling
+        // Normalize path separators for Windows compatibility
+        if (packagesConfigFile) {
+            def packagesPath = packagesConfigFile instanceof File ? packagesConfigFile.absolutePath : project.file(packagesConfigFile).absolutePath
+            packagesPath = packagesPath.replace('/', File.separator)
+            args packagesPath
+            project.logger.info("Added packagesConfigFile to args: ${packagesPath}")
+        }
+        if (solutionFile) {
+            def solutionPath = solutionFile instanceof File ? solutionFile.absolutePath : project.file(solutionFile).absolutePath
+            solutionPath = solutionPath.replace('/', File.separator)
+            args solutionPath
+            project.logger.info("Added solutionFile to args: ${solutionPath}")
+        } else {
+            project.logger.warn("solutionFile is null or empty - cannot add to args")
+        }
 
         if (!sources.isEmpty()) args '-Source', sources.join(';')
         if (noCache) args '-NoCache'
