@@ -40,9 +40,13 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          key: ${{ runner.os }}-gradle-${{ matrix.gradle-version }}-${{ hashFiles('**/*.gradle*') }}
           restore-keys: |
+            ${{ runner.os }}-gradle-${{ matrix.gradle-version }}-
             ${{ runner.os }}-gradle-
+      
+      - name: Update Gradle wrapper to ${{ matrix.gradle-version }}
+        run: ./gradlew wrapper --gradle-version ${{ matrix.gradle-version }} --no-daemon
       
       - name: Run tests with Gradle ${{ matrix.gradle-version }}
         run: ./gradlew clean test --no-daemon
