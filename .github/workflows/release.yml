@@ -123,7 +123,9 @@ jobs:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
           SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
         run: |
-          gradle publishToSonatype closeStagingRepositories --no-daemon
+          gradle publishToSonatype closeStagingRepositories --no-daemon \
+            -Psigning.key="$SIGNING_KEY" \
+            -Psigning.password="$SIGNING_PASSWORD"
       
       - name: Publish to Gradle Plugin Portal
         env:
