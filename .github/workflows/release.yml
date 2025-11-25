@@ -1,0 +1,156 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on tags like v2.24, v2.25, etc.
+      - '[0-9]+.[0-9]+*'  # Also supports tags like 2.24, 2.25, etc.
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for changelog extraction
+      
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Tag format: v2.24 -> 2.24
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            # Tag format: 2.24 -> 2.24
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+      
+      - name: Update version in gradle.properties
+        run: |
+          sed -i "s/^version = .*/version = ${{ steps.version.outputs.version }}/" gradle.properties
+          cat gradle.properties
+      
+      - name: Extract changelog for version
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "Extracting changelog for version: $VERSION"
+          
+          # Extract changelog section for this version using awk
+          # Pattern: from "## VERSION" to next "## " or end of file
+          CHANGELOG=$(awk -v version="$VERSION" '
+            BEGIN { found=0; in_section=0 }
+            /^## / {
+              if (in_section) exit  # Stop at next version section
+              if ($0 ~ "^## " version "$" || $0 ~ "^## " version " ") {
+                found=1
+                in_section=1
+                next
+              }
+            }
+            in_section { print }
+          ' CHANGELOG.md)
+          
+          # If empty, try without the "## " prefix
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG=$(awk -v version="$VERSION" '
+              BEGIN { found=0; in_section=0 }
+              /^## / {
+                if (in_section) exit
+                if ($0 ~ "^## " version "$" || $0 ~ "^## " version " ") {
+                  found=1
+                  in_section=1
+                  next
+                }
+              }
+              in_section { print }
+            ' CHANGELOG.md)
+          fi
+          
+          # If still empty, use a default message
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="See CHANGELOG.md for details."
+          fi
+          
+          # Escape for GitHub output (multiline)
+          {
+            echo "changelog<<EOF"
+            echo "$CHANGELOG"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+          
+          echo "Changelog extracted (first 200 chars):"
+          echo "$CHANGELOG" | head -c 200
+          echo ""
+      
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      
+      - name: Build plugin
+        run: ./gradlew clean build -x test
+      
+      - name: Publish to Maven Central (Sonatype)
+        env:
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: |
+          ./gradlew publishToSonatype closeStagingRepositories
+      
+      - name: Publish to Gradle Plugin Portal
+        env:
+          GRADLE_PUBLISH_KEY: ${{ secrets.GRADLE_PUBLISH_KEY }}
+          GRADLE_PUBLISH_SECRET: ${{ secrets.GRADLE_PUBLISH_SECRET }}
+        run: |
+          ./gradlew publishPlugins
+      
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ steps.version.outputs.version }}
+          body: |
+            ## Version ${{ steps.version.outputs.version }}
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ---
+            
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.ref }}
+          draft: false
+          prerelease: false
+        continue-on-error: true  # Continue even if release creation fails (might already exist)
+      
+      - name: Create GitHub Release (alternative method)
+        if: failure()  # Only if previous step failed
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref }}
+          name: Release ${{ steps.version.outputs.version }}
+          body: |
+            ## Version ${{ steps.version.outputs.version }}
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ---
+            
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.ref }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

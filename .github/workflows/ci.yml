@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        java-version: ['17', '21']
+        gradle-version: ['8.5', '9.2']
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
+      
+      - name: Setup Gradle ${{ matrix.gradle-version }}
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: ${{ matrix.gradle-version }}
+      
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      
+      - name: Run tests with Gradle ${{ matrix.gradle-version }}
+        run: ./gradlew clean test --no-daemon
+      
+      - name: Build plugin with Gradle ${{ matrix.gradle-version }}
+        run: ./gradlew clean build -x test --no-daemon
+      
+      - name: Validate plugin
+        run: ./gradlew validatePlugins --no-daemon
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results-java${{ matrix.java-version }}-gradle${{ matrix.gradle-version }}
+          path: build/test-results/
+          retention-days: 7
+      
+      - name: Upload build artifacts
+        if: matrix.java-version == '17' && matrix.gradle-version == '9.2'
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts
+          path: build/libs/*.jar
+          retention-days: 1
+
