@@ -23,6 +23,22 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
       
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: wrapper  # Use wrapper version
+      
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}-${{ hashFiles('**/*.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}-
+            ${{ runner.os }}-gradle-
+      
       - name: Extract version from tag
         id: version
         run: |
@@ -94,11 +110,11 @@ jobs:
           echo "$CHANGELOG" | head -c 200
           echo ""
       
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-      
       - name: Build plugin
-        run: ./gradlew clean build -x test
+        run: gradle clean build -x test --no-daemon
+      
+      - name: Validate plugin
+        run: gradle validatePlugins --no-daemon
       
       - name: Publish to Maven Central (Sonatype)
         env:
@@ -107,36 +123,16 @@ jobs:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
           SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
         run: |
-          ./gradlew publishToSonatype closeStagingRepositories
+          gradle publishToSonatype closeStagingRepositories --no-daemon
       
       - name: Publish to Gradle Plugin Portal
         env:
           GRADLE_PUBLISH_KEY: ${{ secrets.GRADLE_PUBLISH_KEY }}
           GRADLE_PUBLISH_SECRET: ${{ secrets.GRADLE_PUBLISH_SECRET }}
         run: |
-          ./gradlew publishPlugins
+          gradle publishPlugins --no-daemon
       
       - name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ steps.version.outputs.version }}
-          body: |
-            ## Version ${{ steps.version.outputs.version }}
-            
-            ${{ steps.changelog.outputs.changelog }}
-            
-            ---
-            
-            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.ref }}
-          draft: false
-          prerelease: false
-        continue-on-error: true  # Continue even if release creation fails (might already exist)
-      
-      - name: Create GitHub Release (alternative method)
-        if: failure()  # Only if previous step failed
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref }}
