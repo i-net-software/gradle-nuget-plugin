@@ -20,6 +20,8 @@ dependencies {
     implementation localGroovy()
     implementation 'commons-io:commons-io:2.5'
     testImplementation 'xmlunit:xmlunit:1.6'
+    // JUnit 4 for JUnit-based tests (NuGetPluginTest, etc.)
+    testImplementation 'junit:junit:4.13.2'
     // Updated Spock to version compatible with Gradle 8.3+ and Java 17+
     // Spock 2.x supports Groovy 3.x and Java 8+
     testImplementation 'org.spockframework:spock-core:2.3-groovy-3.0'
