@@ -49,7 +49,10 @@ class NuGetPluginTest {
             nuspecFile = nuspec
         }
 
-        project.tasks.nugetPack.exec()
+        // Execute the task properly to trigger @TaskAction execute() method
+        project.tasks.nugetPack.actions.each { action ->
+            action.execute(project.tasks.nugetPack)
+        }
         assertTrue(project.tasks.nugetPack.packageFile.exists())
     }
 
@@ -78,7 +81,10 @@ class NuGetPluginTest {
             packageVersion = "100.200.300"
         }
 
-        project.tasks.nugetPack.exec()
+        // Execute the task properly to trigger @TaskAction execute() method
+        project.tasks.nugetPack.actions.each { action ->
+            action.execute(project.tasks.nugetPack)
+        }
         def packageFile = project.tasks.nugetPack.packageFile
         assertEquals("bar.100.200.300.nupkg", packageFile.name)
         assertTrue(packageFile.exists())

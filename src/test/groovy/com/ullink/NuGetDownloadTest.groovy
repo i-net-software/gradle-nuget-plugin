@@ -210,6 +210,10 @@ class NuGetDownloadTest {
             nuspecFile = nuspec
         }
 
-        project.tasks.nugetPack.exec()
+        // Execute the task properly to trigger @TaskAction execute() method
+        // This ensures nuget.exe download and Mono wrapping are handled correctly
+        project.tasks.nugetPack.actions.each { action ->
+            action.execute(project.tasks.nugetPack)
+        }
     }
 }
