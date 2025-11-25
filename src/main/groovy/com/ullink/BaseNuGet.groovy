@@ -310,11 +310,34 @@ class BaseNuGet extends Exec {
 
             project.logger.info "Downloading NuGet from $nugetUrl ..."
 
-            new URL(nugetUrl).withInputStream {
-                inputStream ->
-                    localNuget.withOutputStream { outputStream ->
-                        outputStream << inputStream
+            try {
+                new URL(nugetUrl).withInputStream {
+                    inputStream ->
+                        localNuget.withOutputStream { outputStream ->
+                            outputStream << inputStream
+                        }
+                }
+                // Make the file executable on Unix systems
+                if (!isFamily(FAMILY_WINDOWS)) {
+                    localNuget.setExecutable(true, false)
+                }
+            } catch (Exception e) {
+                // If versioned URL fails, try /latest/ as fallback
+                def fallbackUrl = "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe"
+                project.logger.warn "Failed to download from $nugetUrl, trying fallback: $fallbackUrl (${e.message})"
+                try {
+                    new URL(fallbackUrl).withInputStream {
+                        inputStream ->
+                            localNuget.withOutputStream { outputStream ->
+                                outputStream << inputStream
+                            }
                     }
+                    if (!isFamily(FAMILY_WINDOWS)) {
+                        localNuget.setExecutable(true, false)
+                    }
+                } catch (Exception e2) {
+                    throw new RuntimeException("Failed to download NuGet from both $nugetUrl and $fallbackUrl: ${e2.message}", e2)
+                }
             }
         }
         localNuget
