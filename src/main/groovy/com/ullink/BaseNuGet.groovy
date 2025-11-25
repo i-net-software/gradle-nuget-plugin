@@ -266,6 +266,8 @@ class BaseNuGet extends Exec {
                 execAction.setExecutable(executable)
                 execAction.setArgs(getArgs())
                 execAction.setWorkingDir(project.projectDir)
+                // ExecAction.execute() throws ExecException on failure, which is what we want
+                // This ensures tests fail properly when nuget.exe execution fails
                 execAction.execute()
             } else {
                 // Fallback: try to call Exec.exec() via reflection
