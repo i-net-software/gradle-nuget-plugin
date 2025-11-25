@@ -14,7 +14,7 @@ import java.nio.file.Paths
 import java.util.zip.CRC32
 
 @RunWith(JUnit4.class)
-class NuGetDownloadTest extends GroovyTestCase  {
+class NuGetDownloadTest {
 
     private File cachesFolder
     private File tempFolder

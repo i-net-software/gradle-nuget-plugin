@@ -22,9 +22,13 @@ dependencies {
     testImplementation 'xmlunit:xmlunit:1.6'
     // JUnit 4 for JUnit-based tests (NuGetPluginTest, etc.)
     testImplementation 'junit:junit:4.13.2'
-    // Updated Spock to version compatible with Gradle 8.3+ and Java 17+
-    // Spock 2.x supports Groovy 3.x and Java 8+
-    testImplementation 'org.spockframework:spock-core:2.3-groovy-3.0'
+    // Groovy test support (GroovyTestCase, etc.) - use same version as Gradle's bundled Groovy
+    // Gradle 9.2.1 uses Groovy 4.0.28, but we should use localGroovy() for test dependencies too
+    testImplementation localGroovy()
+    // Spock version selection: Use 2.3-groovy-4.0 for Groovy 4.0 compatibility (Gradle 9.2.1)
+    // Note: This may not work with Gradle 8.3 (Groovy 3.0.x) - may need conditional version
+    // For now, prioritize Gradle 9.2.1 compatibility
+    testImplementation 'org.spockframework:spock-core:2.3-groovy-4.0'
 }
 
 
