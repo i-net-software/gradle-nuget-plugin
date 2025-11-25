@@ -31,12 +31,6 @@ jobs:
         with:
           gradle-version: ${{ matrix.gradle-version }}
       
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-      
-      - name: Update Gradle wrapper to ${{ matrix.gradle-version }}
-        run: gradle wrapper --gradle-version ${{ matrix.gradle-version }} --no-daemon
-      
       - name: Cache Gradle dependencies
         uses: actions/cache@v3
         with:
@@ -49,13 +43,13 @@ jobs:
             ${{ runner.os }}-gradle-
       
       - name: Run tests with Gradle ${{ matrix.gradle-version }}
-        run: ./gradlew clean test --no-daemon
+        run: gradle clean test --no-daemon
       
       - name: Build plugin with Gradle ${{ matrix.gradle-version }}
-        run: ./gradlew clean build -x test --no-daemon
+        run: gradle clean build -x test --no-daemon
       
       - name: Validate plugin
-        run: ./gradlew validatePlugins --no-daemon
+        run: gradle validatePlugins --no-daemon
       
       - name: Upload test results
         if: always()
