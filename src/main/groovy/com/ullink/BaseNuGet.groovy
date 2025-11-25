@@ -306,14 +306,23 @@ class BaseNuGet extends Exec {
             if (!folder.isDirectory())
                 folder.mkdirs()
 
-            def nugetUrl = getNugetDownloadLink()
-            project.logger.info "Downloading NuGet from $nugetUrl ..."
-
-            new URL(nugetUrl).withInputStream {
-                inputStream ->
-                    localNuget.withOutputStream { outputStream ->
-                        outputStream << inputStream
+            def urls = getNugetDownloadUrls()
+            for (def url : urls) {
+                try {
+                    project.logger.info "Downloading NuGet from $url ..."
+                    new URL(url).withInputStream { inputStream ->
+                        localNuget.withOutputStream { outputStream ->
+                            outputStream << inputStream
+                        }
                     }
+                    break
+                } catch (Exception e) {
+                    if (urls.indexOf(url) < urls.size() - 1) {
+                        project.logger.warn "Failed to download from $url, trying next URL (${e.message})"
+                    } else {
+                        throw new RuntimeException("Failed to download NuGet from all URLs: ${urls.join(', ')}", e)
+                    }
+                }
             }
             
             // Make the file executable on Unix systems (required for Mono)
@@ -325,16 +334,23 @@ class BaseNuGet extends Exec {
     }
 
     @Internal
-    protected String getNugetDownloadLink() {
-        // If a custom URL is provided, use it
+    protected List<String> getNugetDownloadUrls() {
+        // If a custom URL is provided, use it only
         if (nugetExePath != null && !nugetExePath.empty && nugetExePath.startsWith("http")) {
             project.logger.debug("Nuget url path is resolved from property 'nugetExePath'")
-            return nugetExePath
+            return [nugetExePath]
         }
 
-        // Use /latest/ endpoint for simplicity - always gets the latest version
-        // This is more reliable than versioned URLs which may not exist
-        return "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe"
+        // If version is specified, try versioned URL first, then fallback to /latest/
+        def version = project.extensions.nuget.version
+        if (version != null && !version.empty) {
+            def exeName = version < '3.4.4' ? 'nuget.exe' : 'NuGet.exe'
+            def versionedUrl = "https://dist.nuget.org/win-x86-commandline/v${version}/${exeName}"
+            return [versionedUrl, "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe"]
+        }
+
+        // No version specified, use /latest/
+        return ["https://dist.nuget.org/win-x86-commandline/latest/nuget.exe"]
     }
 
     @Internal
