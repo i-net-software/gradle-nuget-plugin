@@ -307,37 +307,18 @@ class BaseNuGet extends Exec {
                 folder.mkdirs()
 
             def nugetUrl = getNugetDownloadLink()
-
             project.logger.info "Downloading NuGet from $nugetUrl ..."
 
-            try {
-                new URL(nugetUrl).withInputStream {
-                    inputStream ->
-                        localNuget.withOutputStream { outputStream ->
-                            outputStream << inputStream
-                        }
-                }
-                // Make the file executable on Unix systems
-                if (!isFamily(FAMILY_WINDOWS)) {
-                    localNuget.setExecutable(true, false)
-                }
-            } catch (Exception e) {
-                // If versioned URL fails, try /latest/ as fallback
-                def fallbackUrl = "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe"
-                project.logger.warn "Failed to download from $nugetUrl, trying fallback: $fallbackUrl (${e.message})"
-                try {
-                    new URL(fallbackUrl).withInputStream {
-                        inputStream ->
-                            localNuget.withOutputStream { outputStream ->
-                                outputStream << inputStream
-                            }
+            new URL(nugetUrl).withInputStream {
+                inputStream ->
+                    localNuget.withOutputStream { outputStream ->
+                        outputStream << inputStream
                     }
-                    if (!isFamily(FAMILY_WINDOWS)) {
-                        localNuget.setExecutable(true, false)
-                    }
-                } catch (Exception e2) {
-                    throw new RuntimeException("Failed to download NuGet from both $nugetUrl and $fallbackUrl: ${e2.message}", e2)
-                }
+            }
+            
+            // Make the file executable on Unix systems (required for Mono)
+            if (!isFamily(FAMILY_WINDOWS)) {
+                localNuget.setExecutable(true, false)
             }
         }
         localNuget
@@ -345,15 +326,15 @@ class BaseNuGet extends Exec {
 
     @Internal
     protected String getNugetDownloadLink() {
+        // If a custom URL is provided, use it
         if (nugetExePath != null && !nugetExePath.empty && nugetExePath.startsWith("http")) {
             project.logger.debug("Nuget url path is resolved from property 'nugetExePath'")
-
             return nugetExePath
         }
 
-        def exeName = project.extensions.nuget.version < '3.4.4' ? 'nuget.exe' : 'NuGet.exe'
-
-        return "https://dist.nuget.org/win-x86-commandline/v${project.extensions.nuget.version}/${exeName}"
+        // Use /latest/ endpoint for simplicity - always gets the latest version
+        // This is more reliable than versioned URLs which may not exist
+        return "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe"
     }
 
     @Internal
