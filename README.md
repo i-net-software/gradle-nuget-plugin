@@ -1,6 +1,6 @@
 # Gradle NuGet Plugin
 
-> **Note:** This is a fork of the original [gradle-nuget-plugin](https://github.com/Ullink/gradle-nuget-plugin) by Ullink/i-net software, updated for **Gradle 9 compatibility** and published under the `de.inetsoftware` group ID.
+> **Note:** This is a fork of the original [gradle-nuget-plugin](https://github.com/Ullink/gradle-nuget-plugin) by Itiviti/Ullink, updated for **Gradle 9 compatibility** and published under the `de.inetsoftware` group ID.
 
 > **Disclaimer:** Most of the changes in this fork, including Gradle 8/9 compatibility fixes and cross-platform improvements, were created with the assistance of Cursor AI. While the code has been tested and verified, please review changes carefully before using in production environments.
 
