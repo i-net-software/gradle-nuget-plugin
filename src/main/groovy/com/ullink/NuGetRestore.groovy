@@ -117,8 +117,8 @@ class NuGetRestore extends BaseNuGet {
             project.logger.debug("Skipping MSBuildPath on non-Windows platform (NuGet will use Mono's xbuild/MSBuild)")
         } else {
             // On Windows, use MSBuildVersion as before
-            if (!msBuildVersion) msBuildVersion = GradleHelper.getPropertyFromTask(project, 'version', 'msbuild')
-            if (msBuildVersion) args '-MsBuildVersion', msBuildVersion
+        if (!msBuildVersion) msBuildVersion = GradleHelper.getPropertyFromTask(project, 'version', 'msbuild')
+        if (msBuildVersion) args '-MsBuildVersion', msBuildVersion
             
             // MSBuildPath can also be explicitly set on Windows
             if (msBuildPath) {

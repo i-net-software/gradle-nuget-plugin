@@ -103,7 +103,7 @@ class BaseNuGet extends Exec {
         this()
         args command
     }
-    
+
     // Dummy exec() method that does nothing - allows subclasses to call super.exec() without error
     // The actual execution is handled by @TaskAction execute()
     void exec() {
@@ -277,7 +277,7 @@ class BaseNuGet extends Exec {
         }
         
         if (!useDotnetRestore) {
-            if (isFamily(FAMILY_WINDOWS)) {
+        if (isFamily(FAMILY_WINDOWS)) {
                 executable = localNuget.absolutePath
             } else {
                 executable = "mono"
@@ -384,9 +384,9 @@ class BaseNuGet extends Exec {
                 try {
                     project.logger.info "Downloading NuGet from $url ..."
                     new URL(url).withInputStream { inputStream ->
-                        localNuget.withOutputStream { outputStream ->
-                            outputStream << inputStream
-                        }
+                    localNuget.withOutputStream { outputStream ->
+                        outputStream << inputStream
+                    }
                     }
                     break
                 } catch (Exception e) {
